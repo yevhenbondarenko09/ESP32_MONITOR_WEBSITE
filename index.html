@@ -178,23 +178,20 @@
             animation: flash 0.5s ease-out;
         }
 
-
-
-
-/* Адаптація для мобільних телефонів */
+        /* Адаптація для мобільних телефонів */
         @media (max-width: 480px) {
             body {
-                padding: 10px; /* Менші відступи від країв екрана */
-                align-items: flex-start; /* Щоб на маленьких екранах було зручніше скролити, якщо не влазить */
+                padding: 10px;
+                align-items: flex-start;
                 padding-top: 20px;
             }
             
             .dashboard {
-                padding: 1.5rem; /* Зменшуємо внутрішні відступи панелі */
+                padding: 1.5rem;
             }
 
             .value {
-                font-size: 1.8rem; /* Трохи зменшуємо цифри, щоб точно влізли */
+                font-size: 1.8rem;
             }
 
             h1 {
@@ -214,7 +211,6 @@
             <div class="card temp">
                 <div class="label-group">
                     <span class="label">Температура</span>
-                    <!-- SVG іконка термометра -->
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#B4182D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>
                 </div>
                 <div class="value-group">
@@ -226,7 +222,6 @@
             <div class="card hum">
                 <div class="label-group">
                     <span class="label">Вологість</span>
-                    <!-- SVG іконка краплі -->
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FDA481" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.74 5.74a8 8 0 1 1-11.31 0z"></path></svg>
                 </div>
                 <div class="value-group">
@@ -238,7 +233,6 @@
             <div class="card time">
                 <div class="label-group">
                     <span class="label">Uptime</span>
-                    <!-- SVG іконка годинника -->
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#37415C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 </div>
                 <div class="value-group">
@@ -258,6 +252,11 @@
         const mqttPort = 8884;
         const mqttTopic = "ukraine/lviv/Bondarenko/ESP32";
         const clientId = "client_" + Math.random().toString(16).substr(2, 8);
+        
+        // Змінна для таймера "сторожовий пес" (Watchdog)
+        let dataWatchdog = null;
+        // Час очікування даних (у мілісекундах) до статусу "Офлайн"
+        const DATA_TIMEOUT = 15000; // 15 секунд
 
         const client = new Paho.MQTT.Client(mqttHost, mqttPort, clientId);
 
@@ -272,39 +271,46 @@
         };
 
         function connect() {
-            document.getElementById("status").innerText = "● Підключення...";
+            setVisualStatus("connecting");
             client.connect(options);
         }
 
         connect();
 
         function onConnect() {
-            console.log("Connected");
-            const statusEl = document.getElementById("status");
-            statusEl.className = "connected";
-            statusEl.innerText = "● СИСТЕМА ОНЛАЙН";
+            console.log("Connected to Broker");
+            // Підключилися до брокера, але даних ще немає
+            setVisualStatus("waiting");
             client.subscribe(mqttTopic);
         }
 
         function onFail(e) {
             console.log("Connection failed", e);
-            const statusEl = document.getElementById("status");
-            statusEl.className = "disconnected";
-            statusEl.innerText = "● ПОМИЛКА ПІДКЛЮЧЕННЯ";
+            setVisualStatus("offline");
             setTimeout(connect, 5000);
         }
 
         function onConnectionLost(responseObject) {
             if (responseObject.errorCode !== 0) {
-                const statusEl = document.getElementById("status");
-                statusEl.className = "disconnected";
-                statusEl.innerText = "● З'ЄДНАННЯ ВТРАЧЕНО";
+                console.log("Connection lost");
+                setVisualStatus("offline");
                 setTimeout(connect, 5000);
             }
         }
 
         function onMessageArrived(message) {
             try {
+                // Скидаємо попередній таймер, бо дані прийшли
+                clearTimeout(dataWatchdog);
+
+                // Оновлюємо статус на ОНЛАЙН
+                setVisualStatus("online");
+
+                // Запускаємо новий таймер: якщо за 15 сек нічого не прийде -> ОФЛАЙН
+                dataWatchdog = setTimeout(() => {
+                    setVisualStatus("offline_no_data");
+                }, DATA_TIMEOUT);
+
                 const data = JSON.parse(message.payloadString);
                 
                 updateValue("temp-val", data.temp);
@@ -319,16 +325,40 @@
             }
         }
 
-        // Функція для оновлення зі збереженням форматування та анімацією
         function updateValue(elementId, value) {
             const el = document.getElementById(elementId);
             if(value !== undefined) {
                 el.innerText = value.toFixed(2);
-                
-                // Додаємо клас анімації
                 el.classList.remove("updated");
-                void el.offsetWidth; // Магія для перезапуску CSS анімації
+                void el.offsetWidth;
                 el.classList.add("updated");
+            }
+        }
+
+        // Керування написом статусу
+        function setVisualStatus(state) {
+            const statusEl = document.getElementById("status");
+
+            if (state === "online") {
+                statusEl.className = "connected";
+                statusEl.innerText = "● СИСТЕМА ОНЛАЙН";
+            } 
+            else if (state === "offline") {
+                statusEl.className = "disconnected";
+                statusEl.innerText = "● СИСТЕМА ОФЛАЙН (З'єднання втрачено)";
+                clearTimeout(dataWatchdog);
+            }
+            else if (state === "offline_no_data") {
+                statusEl.className = "disconnected";
+                statusEl.innerText = "● СИСТЕМА ОФЛАЙН (Немає даних)";
+            }
+            else if (state === "waiting") {
+                statusEl.className = "disconnected"; // Залишаємо червоним, поки не прийдуть перші дані
+                statusEl.innerText = "● Очікування даних...";
+            }
+            else if (state === "connecting") {
+                statusEl.className = "disconnected";
+                statusEl.innerText = "● Підключення...";
             }
         }
     </script>
