@@ -142,7 +142,8 @@
             margin-left: 2px;
         }
 
-        #uptime-val { font-size: 1.5rem; }
+        /* Трохи зменшуємо шрифт для таймера, щоб він влазив у форматі 00:00:00 */
+        #uptime-val { font-size: 1.6rem; letter-spacing: 1px; }
 
         .footer {
             margin-top: 30px;
@@ -176,6 +177,8 @@
             }
             .dashboard { padding: 1.5rem; }
             .value { font-size: 1.8rem; }
+            /* На мобільному таймер може бути ще трохи меншим */
+            #uptime-val { font-size: 1.4rem; }
             h1 { font-size: 1.3rem; }
         }
     </style>
@@ -217,8 +220,7 @@
                 </div>
                 <div class="value-group">
                     <span id="uptime-val" class="value">-</span>
-                    <!-- Додав ID для зміни тексту одиниць виміру -->
-                    <div id="uptime-unit" style="font-size: 0.7rem; color: #6b7c93;">секунд</div>
+                    <div id="uptime-unit" style="font-size: 0.6rem; color: #6b7c93; letter-spacing: 2px;">год : хв : сек</div>
                 </div>
             </div>
         </div>
@@ -235,7 +237,7 @@
         const clientId = "client_" + Math.random().toString(16).substr(2, 8);
         
         let dataWatchdog = null;
-        const DATA_TIMEOUT = 15000; // 15 секунд
+        const DATA_TIMEOUT = 15000;
 
         const client = new Paho.MQTT.Client(mqttHost, mqttPort, clientId);
 
@@ -286,11 +288,10 @@
 
                 const data = JSON.parse(message.payloadString);
                 
-                // Оновлення температури і вологості
                 updateValue("temp-val", data.temp);
                 updateValue("hum-val", data.hum);
-
-                // Оновлення часу з розумною конвертацією
+                
+                // Викликаємо функцію форматування часу
                 updateUptime(data.time);
 
                 const now = new Date();
@@ -309,32 +310,25 @@
             }
         }
 
-        // Нова функція спеціально для часу
-        function updateUptime(seconds) {
-            if (seconds === undefined) return;
+        // Функція для формату ГГ:ХХ:СС
+        function updateUptime(totalSeconds) {
+            if (totalSeconds === undefined) return;
 
-            const el = document.getElementById("uptime-val");
-            const unitEl = document.getElementById("uptime-unit");
+            // Перетворюємо в ціле число
+            const secNum = parseInt(totalSeconds, 10); 
             
-            let displayVal = 0;
-            let displayUnit = "секунд";
+            const hours   = Math.floor(secNum / 3600);
+            const minutes = Math.floor((secNum - (hours * 3600)) / 60);
+            const seconds = secNum - (hours * 3600) - (minutes * 60);
 
-            if (seconds < 60) {
-                // Менше хвилини -> показуємо секунди
-                displayVal = seconds;
-                displayUnit = "секунд";
-            } else if (seconds < 3600) {
-                // Менше години -> показуємо хвилини
-                displayVal = seconds / 60;
-                displayUnit = "хвилин";
-            } else {
-                // Більше години -> показуємо години
-                displayVal = seconds / 3600;
-                displayUnit = "годин";
-            }
-
-            el.innerText = displayVal.toFixed(2);
-            unitEl.innerText = displayUnit;
+            // Додаємо нуль спереду, якщо число менше 10 (01, 05 і т.д.)
+            const hDisplay = hours < 10 ? "0" + hours : hours;
+            const mDisplay = minutes < 10 ? "0" + minutes : minutes;
+            const sDisplay = seconds < 10 ? "0" + seconds : seconds;
+            
+            const el = document.getElementById("uptime-val");
+            el.innerText = `${hDisplay}:${mDisplay}:${sDisplay}`;
+            
             triggerAnimation(el);
         }
 
