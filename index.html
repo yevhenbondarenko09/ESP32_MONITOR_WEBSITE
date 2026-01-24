@@ -4,20 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ESP32 Dashboard</title>
-    <!-- Підключаємо шрифт (Oswald для цифр та Montserrat для тексту) -->
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Oswald:wght@500&display=swap" rel="stylesheet">
-    <!-- Підключаємо бібліотеку Paho MQTT -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
     
     <style>
         :root {
-            /* Ваша палітра */
-            --bg-deep: #181A2F;      /* Глибокий фон */
-            --bg-panel: #242E49;     /* Панель */
-            --bg-card: #37415C;      /* Картки */
-            --accent-peach: #FDA481; /* Акцент (текст, іконки) */
-            --accent-red: #B4182D;   /* Червоний акцент */
-            --accent-dark-red: #54162B; /* Темно-червоний */
+            --bg-deep: #181A2F;
+            --bg-panel: #242E49;
+            --bg-card: #37415C;
+            --accent-peach: #FDA481;
+            --accent-red: #B4182D;
+            --accent-dark-red: #54162B;
             --text-light: #e0e6ed;
         }
 
@@ -46,7 +43,6 @@
             overflow: hidden;
         }
 
-        /* Декоративна смужка зверху */
         .dashboard::before {
             content: '';
             position: absolute;
@@ -68,7 +64,6 @@
             text-transform: uppercase;
         }
 
-        /* Статус підключення */
         #status {
             text-align: center;
             font-size: 0.8rem;
@@ -80,7 +75,7 @@
         }
         
         .connected {
-            background-color: rgba(253, 164, 129, 0.2); /* Прозорий персиковий */
+            background-color: rgba(253, 164, 129, 0.2);
             color: var(--accent-peach);
             border: 1px solid var(--accent-peach);
         }
@@ -91,14 +86,13 @@
             border: 1px solid var(--accent-red);
         }
 
-        /* Картки даних */
         .grid {
             display: grid;
             gap: 15px;
         }
 
         .card {
-            background-color: var(--bg-deep); /* Темніший фон для контрасту всередині панелі */
+            background-color: var(--bg-deep);
             padding: 15px 20px;
             border-radius: 12px;
             display: flex;
@@ -148,10 +142,7 @@
             margin-left: 2px;
         }
 
-        /* Спеціальний стиль для uptime, бо там час */
-        #uptime-val {
-            font-size: 1.5rem; 
-        }
+        #uptime-val { font-size: 1.5rem; }
 
         .footer {
             margin-top: 30px;
@@ -167,7 +158,6 @@
             font-weight: 600;
         }
 
-        /* Анімація миготіння при оновленні */
         @keyframes flash {
             0% { color: #fff; }
             50% { color: var(--accent-peach); text-shadow: 0 0 10px var(--accent-peach); }
@@ -178,25 +168,15 @@
             animation: flash 0.5s ease-out;
         }
 
-        /* Адаптація для мобільних телефонів */
         @media (max-width: 480px) {
             body {
                 padding: 10px;
                 align-items: flex-start;
                 padding-top: 20px;
             }
-            
-            .dashboard {
-                padding: 1.5rem;
-            }
-
-            .value {
-                font-size: 1.8rem;
-            }
-
-            h1 {
-                font-size: 1.3rem;
-            }
+            .dashboard { padding: 1.5rem; }
+            .value { font-size: 1.8rem; }
+            h1 { font-size: 1.3rem; }
         }
     </style>
 </head>
@@ -237,7 +217,8 @@
                 </div>
                 <div class="value-group">
                     <span id="uptime-val" class="value">-</span>
-                    <div style="font-size: 0.7rem; color: #6b7c93;">секунд</div>
+                    <!-- Додав ID для зміни тексту одиниць виміру -->
+                    <div id="uptime-unit" style="font-size: 0.7rem; color: #6b7c93;">секунд</div>
                 </div>
             </div>
         </div>
@@ -253,9 +234,7 @@
         const mqttTopic = "ukraine/lviv/Bondarenko/ESP32";
         const clientId = "client_" + Math.random().toString(16).substr(2, 8);
         
-        // Змінна для таймера "сторожовий пес" (Watchdog)
         let dataWatchdog = null;
-        // Час очікування даних (у мілісекундах) до статусу "Офлайн"
         const DATA_TIMEOUT = 15000; // 15 секунд
 
         const client = new Paho.MQTT.Client(mqttHost, mqttPort, clientId);
@@ -279,7 +258,6 @@
 
         function onConnect() {
             console.log("Connected to Broker");
-            // Підключилися до брокера, але даних ще немає
             setVisualStatus("waiting");
             client.subscribe(mqttTopic);
         }
@@ -300,22 +278,20 @@
 
         function onMessageArrived(message) {
             try {
-                // Скидаємо попередній таймер, бо дані прийшли
                 clearTimeout(dataWatchdog);
-
-                // Оновлюємо статус на ОНЛАЙН
                 setVisualStatus("online");
-
-                // Запускаємо новий таймер: якщо за 15 сек нічого не прийде -> ОФЛАЙН
                 dataWatchdog = setTimeout(() => {
                     setVisualStatus("offline_no_data");
                 }, DATA_TIMEOUT);
 
                 const data = JSON.parse(message.payloadString);
                 
+                // Оновлення температури і вологості
                 updateValue("temp-val", data.temp);
                 updateValue("hum-val", data.hum);
-                updateValue("uptime-val", data.time);
+
+                // Оновлення часу з розумною конвертацією
+                updateUptime(data.time);
 
                 const now = new Date();
                 document.getElementById("last-update").innerText = now.toLocaleTimeString('uk-UA');
@@ -329,13 +305,45 @@
             const el = document.getElementById(elementId);
             if(value !== undefined) {
                 el.innerText = value.toFixed(2);
-                el.classList.remove("updated");
-                void el.offsetWidth;
-                el.classList.add("updated");
+                triggerAnimation(el);
             }
         }
 
-        // Керування написом статусу
+        // Нова функція спеціально для часу
+        function updateUptime(seconds) {
+            if (seconds === undefined) return;
+
+            const el = document.getElementById("uptime-val");
+            const unitEl = document.getElementById("uptime-unit");
+            
+            let displayVal = 0;
+            let displayUnit = "секунд";
+
+            if (seconds < 60) {
+                // Менше хвилини -> показуємо секунди
+                displayVal = seconds;
+                displayUnit = "секунд";
+            } else if (seconds < 3600) {
+                // Менше години -> показуємо хвилини
+                displayVal = seconds / 60;
+                displayUnit = "хвилин";
+            } else {
+                // Більше години -> показуємо години
+                displayVal = seconds / 3600;
+                displayUnit = "годин";
+            }
+
+            el.innerText = displayVal.toFixed(2);
+            unitEl.innerText = displayUnit;
+            triggerAnimation(el);
+        }
+
+        function triggerAnimation(el) {
+            el.classList.remove("updated");
+            void el.offsetWidth;
+            el.classList.add("updated");
+        }
+
         function setVisualStatus(state) {
             const statusEl = document.getElementById("status");
 
@@ -353,7 +361,7 @@
                 statusEl.innerText = "● СИСТЕМА ОФЛАЙН (Немає даних)";
             }
             else if (state === "waiting") {
-                statusEl.className = "disconnected"; // Залишаємо червоним, поки не прийдуть перші дані
+                statusEl.className = "disconnected";
                 statusEl.innerText = "● Очікування даних...";
             }
             else if (state === "connecting") {
