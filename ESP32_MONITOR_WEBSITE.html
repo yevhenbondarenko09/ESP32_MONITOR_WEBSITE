@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Dashboard</title>
+    <!-- Підключаємо шрифт (Oswald для цифр та Montserrat для тексту) -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Oswald:wght@500&display=swap" rel="stylesheet">
+    <!-- Підключаємо бібліотеку Paho MQTT -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+    
+    <style>
+        :root {
+            /* Ваша палітра */
+            --bg-deep: #181A2F;      /* Глибокий фон */
+            --bg-panel: #242E49;     /* Панель */
+            --bg-card: #37415C;      /* Картки */
+            --accent-peach: #FDA481; /* Акцент (текст, іконки) */
+            --accent-red: #B4182D;   /* Червоний акцент */
+            --accent-dark-red: #54162B; /* Темно-червоний */
+            --text-light: #e0e6ed;
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: var(--bg-deep);
+            color: var(--text-light);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .dashboard {
+            background-color: var(--bg-panel);
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 100%;
+            max-width: 350px;
+            border: 1px solid var(--bg-card);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Декоративна смужка зверху */
+        .dashboard::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: linear-gradient(90deg, var(--accent-red), var(--accent-peach));
+        }
+
+        h1 {
+            text-align: center;
+            font-weight: 600;
+            font-size: 1.5rem;
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: var(--accent-peach);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* Статус підключення */
+        #status {
+            text-align: center;
+            font-size: 0.8rem;
+            padding: 8px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+        
+        .connected {
+            background-color: rgba(253, 164, 129, 0.2); /* Прозорий персиковий */
+            color: var(--accent-peach);
+            border: 1px solid var(--accent-peach);
+        }
+        
+        .disconnected {
+            background-color: var(--accent-dark-red);
+            color: #ffcccc;
+            border: 1px solid var(--accent-red);
+        }
+
+        /* Картки даних */
+        .grid {
+            display: grid;
+            gap: 15px;
+        }
+
+        .card {
+            background-color: var(--bg-deep); /* Темніший фон для контрасту всередині панелі */
+            padding: 15px 20px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid var(--bg-card);
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .card.temp { border-left-color: var(--accent-red); }
+        .card.hum { border-left-color: var(--accent-peach); }
+        .card.time { border-left-color: var(--bg-card); }
+
+        .label-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #8fa3bf;
+            margin-bottom: 4px;
+        }
+
+        .value-group {
+            text-align: right;
+        }
+
+        .value {
+            font-family: 'Oswald', sans-serif;
+            font-size: 2rem;
+            font-weight: 500;
+            color: #fff;
+            line-height: 1;
+        }
+        
+        .unit {
+            font-size: 1rem;
+            color: var(--accent-peach);
+            margin-left: 2px;
+        }
+
+        /* Спеціальний стиль для uptime, бо там час */
+        #uptime-val {
+            font-size: 1.5rem; 
+        }
+
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #6b7c93;
+            border-top: 1px solid var(--bg-card);
+            padding-top: 15px;
+        }
+
+        .timestamp {
+            color: var(--accent-peach);
+            font-weight: 600;
+        }
+
+        /* Анімація миготіння при оновленні */
+        @keyframes flash {
+            0% { color: #fff; }
+            50% { color: var(--accent-peach); text-shadow: 0 0 10px var(--accent-peach); }
+            100% { color: #fff; }
+        }
+        
+        .updated {
+            animation: flash 0.5s ease-out;
+        }
+
+
+
+
+/* Адаптація для мобільних телефонів */
+        @media (max-width: 480px) {
+            body {
+                padding: 10px; /* Менші відступи від країв екрана */
+                align-items: flex-start; /* Щоб на маленьких екранах було зручніше скролити, якщо не влазить */
+                padding-top: 20px;
+            }
+            
+            .dashboard {
+                padding: 1.5rem; /* Зменшуємо внутрішні відступи панелі */
+            }
+
+            .value {
+                font-size: 1.8rem; /* Трохи зменшуємо цифри, щоб точно влізли */
+            }
+
+            h1 {
+                font-size: 1.3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <h1>ESP32 Monitor</h1>
+        <div id="status" class="disconnected">● З'єднання втрачено</div>
+
+        <div class="grid">
+            <!-- Температура -->
+            <div class="card temp">
+                <div class="label-group">
+                    <span class="label">Температура</span>
+                    <!-- SVG іконка термометра -->
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#B4182D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>
+                </div>
+                <div class="value-group">
+                    <span id="temp-val" class="value">-</span><span class="unit">°C</span>
+                </div>
+            </div>
+
+            <!-- Вологість -->
+            <div class="card hum">
+                <div class="label-group">
+                    <span class="label">Вологість</span>
+                    <!-- SVG іконка краплі -->
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FDA481" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.74 5.74a8 8 0 1 1-11.31 0z"></path></svg>
+                </div>
+                <div class="value-group">
+                    <span id="hum-val" class="value">-</span><span class="unit">%</span>
+                </div>
+            </div>
+
+            <!-- Час роботи -->
+            <div class="card time">
+                <div class="label-group">
+                    <span class="label">Uptime</span>
+                    <!-- SVG іконка годинника -->
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#37415C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </div>
+                <div class="value-group">
+                    <span id="uptime-val" class="value">-</span>
+                    <div style="font-size: 0.7rem; color: #6b7c93;">секунд</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            ОНОВЛЕНО: <span id="last-update" class="timestamp">-</span>
+        </div>
+    </div>
+
+    <script>
+        const mqttHost = "broker.hivemq.com";
+        const mqttPort = 8884;
+        const mqttTopic = "ukraine/lviv/Bondarenko/ESP32";
+        const clientId = "client_" + Math.random().toString(16).substr(2, 8);
+
+        const client = new Paho.MQTT.Client(mqttHost, mqttPort, clientId);
+
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+
+        const options = {
+            onSuccess: onConnect,
+            onFailure: onFail,
+            keepAliveInterval: 30,
+            useSSL: true
+        };
+
+        function connect() {
+            document.getElementById("status").innerText = "● Підключення...";
+            client.connect(options);
+        }
+
+        connect();
+
+        function onConnect() {
+            console.log("Connected");
+            const statusEl = document.getElementById("status");
+            statusEl.className = "connected";
+            statusEl.innerText = "● СИСТЕМА ОНЛАЙН";
+            client.subscribe(mqttTopic);
+        }
+
+        function onFail(e) {
+            console.log("Connection failed", e);
+            const statusEl = document.getElementById("status");
+            statusEl.className = "disconnected";
+            statusEl.innerText = "● ПОМИЛКА ПІДКЛЮЧЕННЯ";
+            setTimeout(connect, 5000);
+        }
+
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                const statusEl = document.getElementById("status");
+                statusEl.className = "disconnected";
+                statusEl.innerText = "● З'ЄДНАННЯ ВТРАЧЕНО";
+                setTimeout(connect, 5000);
+            }
+        }
+
+        function onMessageArrived(message) {
+            try {
+                const data = JSON.parse(message.payloadString);
+                
+                updateValue("temp-val", data.temp);
+                updateValue("hum-val", data.hum);
+                updateValue("uptime-val", data.time);
+
+                const now = new Date();
+                document.getElementById("last-update").innerText = now.toLocaleTimeString('uk-UA');
+                
+            } catch (e) {
+                console.error("JSON Error", e);
+            }
+        }
+
+        // Функція для оновлення зі збереженням форматування та анімацією
+        function updateValue(elementId, value) {
+            const el = document.getElementById(elementId);
+            if(value !== undefined) {
+                el.innerText = value.toFixed(2);
+                
+                // Додаємо клас анімації
+                el.classList.remove("updated");
+                void el.offsetWidth; // Магія для перезапуску CSS анімації
+                el.classList.add("updated");
+            }
+        }
+    </script>
+</body>
+</html>
