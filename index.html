@@ -168,7 +168,31 @@
         .updated {
             animation: flash 0.5s ease-out;
         }
+        /* --- ВСТАВИТИ ЦЕ --- */
+        .footer-content {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px; /* Відстань між текстом і кнопкою */
+        }
 
+        .refresh-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+            color: #6b7c93;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .refresh-btn:hover {
+            color: var(--accent-peach);
+            transform: rotate(180deg); /* Кнопка крутиться при наведенні */
+        }
+        /* ------------------- */
         @media (max-width: 480px) {
             body {
                 padding: 10px;
@@ -225,8 +249,20 @@
             </div>
         </div>
 
+       <!-- ЗАМІНИТИ СТАРИЙ footer НА ЦЕЙ -->
         <div class="footer">
-            ОНОВЛЕНО: <span id="last-update" class="timestamp">-</span>
+            <div class="footer-content">
+                <span>ОНОВЛЕНО: <span id="last-update" class="timestamp">-</span></span>
+                
+                <!-- Кнопка перезавантаження -->
+                <button class="refresh-btn" onclick="window.location.reload();" title="Оновити сторінку">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M23 4v6h-6"></path>
+                        <path d="M1 20v-6h6"></path>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
 
